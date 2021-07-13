@@ -1,0 +1,408 @@
+#! /usr/bin/env python 
+# -*- coding: Latin-1 -*-
+# original code attraction.py from jpountz
+# https://codes-sources.commentcamarche.net/profile/user/jpountz
+
+from Tkinter import *
+from math import hypot,sqrt,floor,cos,sin,pi,atan,exp,log
+from tkMessageBox import askokcancel
+from numpy import *
+
+
+# Parameters
+#
+# alt between 0 and 360
+# speed is about 15 (arbitrary unity)
+# angle (degree) can be 0 to 360
+# trajectories can be elliptic, hyperbolic or parabolic
+# exemple : 105/105/14 elliptic
+#           210/45/9   elliptic
+#           350/18/12  hyperbolic
+# As for parabolic, it's more difficult, you can guess
+
+# Operating
+#
+# K constant is G (universal gravity constant) * M (earth mass)
+# satellite's trajectory is computed by solving the mechanical equation:
+#     satellite's mass * acceleration = Earth's gravitational force impact for the satellite
+
+
+global g,ua,dtl
+#g = 6.67*10^-11 #constante_gravitation 
+ua = 149597870000 #mètres
+dtl = 384399000 #distance terre lune, mètres
+
+global m_t,r_t,g_t,vl_t
+#terre
+#m_t = 5.9722*10^24 #masse, kg
+r_t = 6371000 #rayon, mètres
+g_t = 9.80665 #gravité de surface m.s-2
+vl_t = 11186 #vitesse de liberation, m/s
+
+global m_l,r_l,g_l,vl_l
+#lune
+#m_l = 7.3477*10^22 #masse, kg
+r_l = 1736000 #rayon, mètres
+g_l = 1.622 #gravité de surface m.s-2
+vl_l = 2380 #vitesse de liberation, m/s
+
+global m_a,alterrestre, vit_inj_translunaire, alt_lunaire_retour_libre, alt_lunaire_descente_LM, vitorblunapollo
+#apollo--CSM(=CM+SM)+LM
+m_a = (5800+24500)+16500 # apollo mass, kg
+#earth altitude (m) in orbit before translunar injection
+alterrestre = 180000 #180km
+vit_inj_translunaire = 11000 # m/s, entre 10,7 et 11,1 km/s
+#altitude lunaire (m) en orbite avant descente LM ou retour sur terre
+alt_lunaire_retour_libre = 250000 #meters
+alt_lunaire_descente_LM = 110000 #meters
+#vitesse orbitale lunaire
+vitorblunapollo = 1611 #m/s , soit 5800 km/h
+
+
+global E_potentielle, E_cinetique 
+#E_potentielle = masse * g * altitude
+#E_cinetique  = 1/2* masse * vitesse^2
+
+
+
+global theta,dv #theta=angle repérant la position du satellite par rapport à l'horizontale, d=distance(M,I)=distance(N,I)
+
+theta=0
+dv=8
+
+def prepare():
+    # parameters inition, drawing Earth, satellite and Moon
+    global flag,x,y,dx,dy,D,satellite, lib_satellite, force, speed_vector
+    global arrow_speedvector1,arrow_speedvector2
+    global xm,ym,dxm,dym,dm,moon,lib_moon,altitudem,angle_degrem,anglem,forcem
+    global history, tracex, tracey
+    global distfleche
+    
+    i=0
+    satellite = [] #list of objects for trajectory tracing
+    tracex = []  #list of x coords for trajectory tracing
+    tracey = [] #list of y coords for trajectory tracing
+    history = 0
+    
+    #fleche=(16*16) # = distance(M,N)^2
+    distfleche=16 # = distance(M,N)^2
+    
+    
+    P.config(state=DISABLED)
+    T.config(state=ACTIVE)
+    can.delete(ALL)
+
+    #satellite = Apollo 1
+    altitude=int(E_altitude.get())
+    angle_degre=int(E_angle.get())
+    angle=angle_degre*2*pi/360
+    force=int(E_force.get())
+    x,y=L/2-D/2-altitude,L/2
+    dx,dy=force*cos(angle)/20,-force*sin(angle)/20
+    
+    #satellite = Moon
+    altitudem=380
+    angle_degrem=90#angle repérant la position du satellite par rapport à l'horizontale
+    anglem=angle_degrem*2*pi/360
+    forcem=7
+    xm,ym=L/2-380,L/2
+    dxm,dym=forcem*cos(anglem)/20,-forcem*sin(anglem)/20
+    
+    #drawing celestial bodies & satellite
+    Terre=can.create_oval(L/2-D/2,L/2+D/2,L/2+D/2,L/2-D/2,fill='blue')
+    #satellite=can.create_oval(x-d/2,y+d/2,x+d/2,y-d/2,fill='red')
+    
+    #breaking NEW
+    for i in range(0,20):
+       tracex.append(x-(i*10))
+       tracey.append(y-(i*10))
+       satellite.append( can.create_oval(x-d/2,y+d/2,x+d/2,y-d/2,fill='red') )
+       
+    #last satellite has to be hidden
+    can.itemconfig(satellite[19], fill='black')
+       
+       
+       #satellite recent trajectory's tracing
+       #tk_rgb = "#%02x%02x%02x" % (255-(i*5), 0, 0)
+       #satellite.append( can.create_oval(x-(i*10)-d/2,y-(i*10)+d/2,x-(i*10)+d/2,y-(i*10)-d/2,fill=tk_rgb) )
+       
+       #satellite.append( can.create_oval(x-(i*10)-d/2,y-(i*10)+d/2,x-(i*10)+d/2,y-(i*10)-d/2,fill='red') )
+       #satellite.append( can.create_oval(x-d/2,y+d/2,x+d/2,y-d/2,fill='red') )
+
+    #print("Size of satellite List = ",len(satellite))
+    
+    
+    moon=can.create_oval(xm-dm/2,ym+dm/2,xm+dm/2,ym-dm/2,fill='white')
+    
+    #label for Earth, static
+    lib_terre=can.create_text(L/2-30,L/2,text='EARTH', fill='white')
+    #label for Apollo, (very) dynamic
+    lib_satellite=can.create_text(x-40,y,text='Apollo 1', fill='white')
+    #lib_satellite=can.create_text(x-40,y,text='Apollo 1\nVirgil Grissom\nEdward White\nRoger Chaffee', fill='white')
+    #label for Moon, dynamic
+    lib_moon=can.create_text(xm+5,ym-10,text='Moon', fill='white')
+
+    #vector arrowhead 
+    xb, yb = x+80*dx, y+80*dy
+    #tangente to ellipse
+    speed_vector=can.create_line(x,y,xb,yb,fill='red')
+
+        
+    #computing vector arrowhead (for graphic drawing)
+    xi, yi = x+(40*dx),y+(40*dy) #base of vector arrowhead
+    #bird flapping headvector
+    #xmm = xi-9
+    #ymm = (-(dx/dy)*xmm)+yi+((dx/dy)*xi)
+    #xnn = (2*xi)-xmm
+    #ynn = (-(dx/dy)*xnn)+yi+((dx/dy)*xi)
+    xmm = ((2*xi)*(1+(dx*dx)/(dy*dy))-(2*dv))/(2*(1+(dx*dx)/(dy*dy)))
+    ymm = (-(dx/dy)*xmm)+yi+((dx/dy)*xi)
+    xnn = ((2*xi)*(1+(dx*dx)/(dy*dy))+(2*dv))/(2*(1+(dx*dx)/(dy*dy)))
+    ynn = (-(dx/dy)*xnn)+yi+((dx/dy)*xi)
+       
+    #drawing speed vector arrowhead
+    arrow_speedvector1 = can.create_line(xmm,ymm,xb,yb, fill='red')
+    arrow_speedvector2 = can.create_line(xnn,ynn,xb,yb, fill='red')
+    
+    #print("M (xmm=", xmm, ", ymm=", ymm, ")")
+    #print("N (xnn=", xnn, ", ynn=", ynn, ")")
+    
+    
+def accelerate():
+    #speed UP
+    global force,dx,dy,angle,K
+    st=""
+    force = force+1
+    if force>60:
+       force=60
+    st = force
+    E_force.delete(0, END)
+    E_force.insert(0, st)
+    
+    r=hypot(x-L/2,L/2-y)
+    #angle repérant la position du satellite par rapport à l'horizontale
+    if x-L/2>0:
+       theta=atan((-y+L/2)/(x-L/2))
+    else:
+       theta=atan((-y+L/2)/(x-L/2))+pi
+    dx,dy=dx-K*cos(theta)/(r*r),dy+K*sin(theta)/(r*r)
+
+def decelerate():
+    #speed DOWN
+    global force,dx,dy,r,theta,K
+    st=""
+    force = force-1
+    if force<0:
+       force=0
+    st = force
+    E_force.delete(0, END)
+    E_force.insert(0, st)
+    
+    r=hypot(x-L/2,L/2-y)
+    #angle repérant la position du satellite par rapport à l'horizontale
+    if x-L/2>0:
+       theta=atan((-y+L/2)/(x-L/2))
+    else:
+       theta=atan((-y+L/2)/(x-L/2))+pi
+    dx,dy=dx-K*cos(theta)/(r*r),dy+K*sin(theta)/(r*r)
+    
+def lancer():
+    #lance le satellite
+    global flag
+    flag=1
+    orbite()
+
+def orbite():
+    #fonction auxilliaire de la fonction lancer
+    global x,y,dx,dy,orb
+    global lib_satellite
+    global xm,ym,dxm,dym,DM,moon,lib_moon,altitudem,angle_degrem,anglem,forcem,force
+    global history, tracex, tracey, theta,st, Q
+    #global xmm,ymm,xnn,ynn
+
+    if flag==1:
+        T.config(state=DISABLED)
+        #new position
+        #math.hypot(x,y) = sqrt(x*x + y*y).
+        x,y=x+dx,y+dy
+        r=hypot(x-L/2,L/2-y)
+        v=hypot(dx,dy)
+        #angle repérant la position du satellite par rapport à l'horizontale
+        if x-L/2>0:
+            theta=atan((-y+L/2)/(x-L/2))
+        else:
+            theta=atan((-y+L/2)/(x-L/2))+pi
+        dx,dy=dx-K*cos(theta)/(r*r),dy+K*sin(theta)/(r*r)
+        
+        
+        #breaking NEW
+        #can.coords(satellite,x-d/2,y+d/2,x+d/2,y-d/2)
+        can.coords(satellite[0],x-d/2,y+d/2,x+d/2,y-d/2)
+        
+        can.coords(lib_satellite,x-40,y)
+        #tangente to ellipse
+        xb, yb = x+80*dx, y+80*dy
+        
+        can.coords(speed_vector,x,y,x+80*dx,y+80*dy)
+        #can.coords(head_speedvector,xb-d,yb+d,xb+d,yb-d)
+        
+        #computing vector arrowhead (for graphic drawing)
+        xi, yi = x+(40*dx),y+(40*dy) #base of vector arrowhead        
+        xmm = ((2*xi)*(1+(dx*dx)/(dy*dy))-(2*dv))/(2*(1+(dx*dx)/(dy*dy)))
+        ymm = (-(dx/dy)*xmm)+yi+((dx/dy)*xi)
+        xnn = ((2*xi)*(1+(dx*dx)/(dy*dy))+(2*dv))/(2*(1+(dx*dx)/(dy*dy)))
+        ynn = (-(dx/dy)*xnn)+yi+((dx/dy)*xi)
+        
+        #drawing arrowhead od speed vector
+        can.coords(arrow_speedvector1, xmm,ymm,xb,yb)
+        can.coords(arrow_speedvector2, xnn,ynn,xb,yb)
+        
+        #real time altitude
+        rt_altitude = sqrt((x*x)+(y*y)) #distance apollo1-terre
+        st = round(rt_altitude)
+        E_altitude.delete(0, END)
+        E_altitude.insert(0, st)
+        #E_potentielle = masse * g * altitude
+        E_potentielle = m_a * g_t * rt_altitude
+        st = round(E_potentielle)
+        E_pot.delete(0, END)
+        E_pot.insert(0, st)
+        #E_cinetique  = 1/2* masse * vitesse^2
+        E_cinetique   = 0.5* m_a * force
+        st = round(E_cinetique)
+        E_cin.delete(0, END)
+        E_cin.insert(0, st)
+        
+        #moon dynamic
+        xm,ym=xm+dxm,ym+dym
+        rm=hypot(xm-L/2,L/2-ym)
+        vm=hypot(dxm,dym)
+        #angle repérant la position de la lune satellite par rapport à l'horizontale
+        if xm-L/2>0:
+            thetam=atan((-ym+L/2)/(xm-L/2))
+        else:
+            thetam=atan((-ym+L/2)/(xm-L/2))+pi
+        dxm,dym=dxm-K*cos(thetam)/(rm*rm),dym+K*sin(thetam)/(rm*rm)
+        can.coords(moon,xm-dm/2,ym+dm/2,xm+dm/2,ym-dm/2)
+        can.coords(lib_moon,xm+5,ym-10)
+
+        
+        
+        history = history+1
+        #if history % 5 == 0:
+           #print("tracex avant circ = ",tracex)
+           #print("tracey avant circ = ",tracey)
+        tracex = tracex[0:19] # removing last element of list
+        tracey = tracey[0:19] # removing last element of list
+           #print("tracex = ",tracex)
+           #print("tracey = ",tracey)
+        
+        tracex.insert(0, x)
+        tracey.insert(0, y)
+        for i in range(19,1,-1):
+            can.coords(satellite[i],tracex[i]-d/2,tracey[i]+d/2,tracex[i]+d/2,tracey[i]-d/2)
+        
+        if history > 100:
+	   history = 0
+
+        st = theta
+        #Q["text"]=st
+        Q.config(textvariable=st)
+        Q.pack()
+        
+        if x<0 or x>L or y<0 or y>L or r<D/2:
+            stop()
+        #satellite's trajectory
+        #can.create_oval(x,y+1,x+1,y,outline='yellow')
+        
+        #moon trajectory
+        #can.create_oval(xm,ym+1,xm+1,ym,outline='grey')
+
+    orb=fen.after(8,orbite)
+    #orb=fen.after(8,orbite) #=> réglage de la vitesse de l'animation 1=rapide, 8=+lent)
+    #orb=fen.after(2,orbite)
+
+def clavier(event):
+    touche = event.keysym
+    print(touche)
+
+def stop():
+    #arrête le satellite et efface l'écran
+    "" 
+    global flag,orb
+    flag=0
+    fen.after_cancel(orb)
+    P.config(state=ACTIVE)
+    can.delete(ALL) # effacement du contenu de la fenêtre 
+    E_angle.delete(0,angle)
+    E_force.delete(0,force)
+    texte=can.create_text(L/2,L/3,text='MERCI\n\nvous pouvez continuer en modifiant les paramètres\n\nou, tout simplement, arrêter !!!',fill="white")
+
+def quitter():
+    #quitte le programme
+    ans=askokcancel('',"Voulez-vous réellement quitter ?")
+    if ans:fen.quit()
+
+fen=Tk()
+fen.title('Free Return Trajectory')
+
+L=800 #côté du canvas
+D=9  #diamètre de la terre
+dm=3 #moon diameter
+d=2   #diamètre du satellite
+flag=0
+angle,force=0,0
+K=50  #joue le rôle du produit G*M
+KM=1 #G*M
+theta=0
+
+
+#can=Canvas(fen,bg='dark blue',height=L,width=L)
+can=Canvas(fen,bg='black',height=L,width=L)
+can.grid(row=1,column=0,rowspan=2) 
+can2=Canvas(fen,bg='brown',highlightbackground='brown') 
+can2.grid(row=1,column=2,sticky=N)
+
+Button(can2,text='Quitter!',command=quitter,bg="white").pack(side=BOTTOM)
+
+S=Button(can2,text='Stop !',height=2,width=25,relief=GROOVE,bg="white",activebackground="dark green",activeforeground="white",command=stop) 
+S.pack(padx=5,pady=5,side=BOTTOM,anchor=SW)
+
+T=Button(can2,text='Lancer !',height=2,width=25,relief=GROOVE,bg="white",activebackground="dark green",activeforeground="white",command=lancer) 
+T.pack(padx=5,pady=5,side=BOTTOM,anchor=SW)
+
+P=Button(can2,text='Préparer !',height=2,width=25,relief=GROOVE,bg="white",activebackground="dark green",activeforeground="white",command=prepare) 
+P.pack(padx=5,pady=5,side=BOTTOM,anchor=SW)
+
+Q=Button(can2,text='Angle/Hor', textvariable=theta, relief=GROOVE,bg="white",activebackground="dark red",activeforeground="white") 
+Q.pack(padx=5,pady=5,side=BOTTOM,anchor=SW)
+
+E_force=Entry(can2) 
+E_force.pack(padx=8,pady=5,side=BOTTOM) 
+Label(can2,text="Choisir la vitesse initiale à donner",fg='white',bg='brown').pack(side=BOTTOM) 
+E_force.insert(0, 12)
+Button(can2,text='speed+',command=accelerate,bg="white").pack(padx=5,pady=5,side=RIGHT)
+Button(can2,text='speed-',command=decelerate,bg="white").pack(padx=5,pady=5,side=LEFT)
+
+E_pot=Entry(can2) 
+E_pot.pack(padx=8,pady=5,side=BOTTOM) 
+Label(can2,text="E potentielle",fg='white',bg='blue').pack(side=BOTTOM) 
+E_pot.insert(0, 0)
+
+E_cin=Entry(can2) 
+E_cin.pack(padx=8,pady=5,side=BOTTOM) 
+Label(can2,text="E cinétique",fg='white',bg='blue').pack(side=BOTTOM) 
+E_cin.insert(0, 0)
+
+E_angle=Entry(can2) 
+E_angle.pack(padx=8,pady=5,side=BOTTOM) 
+Label(can2,text="Choisir l'angle à donner",fg='white',bg='brown').pack(side=BOTTOM)
+E_angle.insert(0, 80)
+
+E_altitude=Entry(can2) 
+E_altitude.pack(padx=8,pady=5,side=BOTTOM) 
+Label(can2,text="Choisir l'altitude de départ",fg='white',bg='brown').pack(side=LEFT, anchor=SE)
+E_altitude.insert(0, 100)
+
+fen.mainloop()
+fen.destroy()
